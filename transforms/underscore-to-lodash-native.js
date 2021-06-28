@@ -53,14 +53,6 @@ module.exports = function(fileInfo, { jscodeshift: j }, argOptions) {
     .find(j.CallExpression, isUnderscoreExpression)
     .forEach(transformExpression(j, options));
 
-  ast // const _ = require('underscore')
-    .find(j.VariableDeclaration, isUnderscoreRequire)
-    .forEach(transformRequire(j, options));
-  
-  ast // const _ = require('lodash')
-    .find(j.VariableDeclaration, isLodashRequire)
-    .forEach(transformRequire(j, options));
-
   ast // import _ from 'underscore'
     .find(j.ImportDeclaration, isUnderscoreImport)
     .forEach(transformImport(j, options));
@@ -68,6 +60,14 @@ module.exports = function(fileInfo, { jscodeshift: j }, argOptions) {
   ast // import _ from 'lodash'
     .find(j.ImportDeclaration, isLodashImport)
     .forEach(transformImport(j, options));
+
+  ast // const _ = require('underscore')
+    .find(j.VariableDeclaration, isUnderscoreRequire)
+    .forEach(transformRequire(j, options));
+  
+  ast // const _ = require('lodash')
+    .find(j.VariableDeclaration, isLodashRequire)
+    .forEach(transformRequire(j, options));
 
   // Restore opening comments/position
   Object.assign(ast.find(j.Program).get('body', 0).node, { comments, loc });
@@ -170,6 +170,14 @@ function transformUnderscoreMethod(j, ast) {
 function transformRequire(j, options) {
   const imports = Object.keys(j.__methods);
   return (ast) => {
+    if (ast.value.kind === "const") {
+      const { id } = ast.value.declarations.shift();
+      if (id.type === "ObjectPattern") {
+        imports.push(...id.properties.map((p) => p.key.name));
+        j(ast).replaceWith(j.importDeclaration(getImportSpecifiers(j, imports), j.literal("lodash")));
+        return;
+      }
+    }
     if (imports.length === 0) {
       j(ast).remove();
     } else if (options['split-imports']) {
